@@ -30,7 +30,16 @@ const password = dialog.querySelector('#account-password');
 const name = dialog.querySelector('#account-name');
 let mode = 'login';
 let busy = false;
-let auth;
+export let auth;
+let signedUser = null;
+export function getUser() { return signedUser; }
+export function openAuth(next = 'login') { open(next); }
+export async function getToken() {
+  if (!auth) throw new Error('Account service is temporarily unavailable.');
+  const token = await auth.getJWTToken();
+  if (!token) { open('login'); throw new Error('Please log in to use your kitchen.'); }
+  return token;
+}
 
 try {
   if (!url || !url.startsWith('https://') || url.includes('=')) throw new Error('Invalid auth URL');
@@ -61,6 +70,8 @@ function open(next) {
 }
 
 function showUser(user) {
+  signedUser = user;
+  window.dispatchEvent(new CustomEvent('kitchen-auth', { detail: user }));
   controls.replaceChildren();
   if (!user) {
     for (const [label, next, style] of [['Log in', 'login', 'account-link'], ['Join the kitchen →', 'signup', 'btn']]) {
@@ -73,6 +84,8 @@ function showUser(user) {
   const greeting = document.createElement('span');
   greeting.className = 'account-greeting';
   greeting.textContent = `Hello, ${user.name || user.email}`;
+  const kitchen = document.createElement('a');
+  kitchen.href = '/kitchen.html'; kitchen.className = 'account-link'; kitchen.textContent = 'My kitchen';
   const logout = document.createElement('button');
   logout.type = 'button'; logout.className = 'account-link'; logout.textContent = 'Log out';
   logout.addEventListener('click', async () => {
@@ -86,7 +99,7 @@ function showUser(user) {
       logout.textContent = 'Couldn’t log out. Try again';
     }
   });
-  controls.append(greeting, logout);
+  controls.append(greeting, kitchen, logout);
 }
 
 async function refreshSession() {
@@ -94,7 +107,7 @@ async function refreshSession() {
   try {
     const result = await auth.getSession();
     if (result.error) return;
-    showUser(result.data?.user || null);
+    showUser(result.data?.user || result.data?.session?.user || null);
   } catch {
     // Do not invent a signed-in state when the service is unreachable.
   }
@@ -128,9 +141,10 @@ form.addEventListener('submit', async event => {
     const session = await auth.getSession();
     password.value = '';
     if (session.error) { message.textContent = 'Your request was accepted, but we couldn’t check your session. Please try logging in.'; return; }
-    if (session.data?.user) {
-      showUser(session.data.user);
+    if (session.data?.user || session.data?.session?.user) {
+      showUser(session.data.user || session.data.session.user);
       dialog.close();
+      if (!window.location.pathname.endsWith('/kitchen.html')) window.location.href = '/kitchen.html';
     } else {
       message.textContent = mode === 'signup'
         ? 'Your account was created. Check your inbox for a verification email, then log in.'
@@ -151,4 +165,9 @@ dialog.addEventListener('click', event => { if (event.target === dialog) { const
 dialog.querySelector('#switch-account').addEventListener('click', () => setMode(mode === 'login' ? 'signup' : 'login'));
 window.addEventListener('focus', refreshSession);
 showUser(null);
-refreshSession();
+export const authReady = refreshSession();
+document.querySelectorAll('[data-auth]').forEach(button => button.addEventListener('click', () => {
+  if (signedUser) { window.location.href = '/kitchen.html'; return; }
+  open(button.dataset.auth === 'signup' ? 'signup' : 'login');
+  if (button.dataset.auth === 'demo') { email.value = 'demo@demo.com'; password.value = 'password123!'; }
+}));

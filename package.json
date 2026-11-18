@@ -1,10 +1,11 @@
 {
   "name": "plantedandplates",
   "private": true,
-  "version": "0.2.0",
+  "version": "1.0.0",
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
-  "dependencies": { "@neondatabase/auth": "0.7.0-beta" },
-  "devDependencies": { "vite": "6.4.6" },
+  "scripts": { "dev": "node --env-file-if-exists=.env.local dev.mjs", "build": "node bootstrap.mjs && node build.mjs", "test": "node --test tests.mjs", "seed:demo": "node --env-file-if-exists=.env.local bootstrap.mjs" },
+  "dependencies": { "@neondatabase/auth": "0.7.0-beta", "@neondatabase/serverless": "1.2.1", "jose": "6.2.17", "stripe": "23.1.0" },
+  "devDependencies": { "esbuild": "0.28.2" },
+  "overrides": { "better-auth": "1.7.25", "@better-auth/drizzle-adapter": "1.7.25", "zod": "^4.6.6" },
   "engines": { "node": ">=22" }
 }

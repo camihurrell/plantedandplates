@@ -1,0 +1,9 @@
+# Add in Vercel Environment Variables; never replace these placeholders in GitHub.
+# Existing Neon-provided variables can stay as they are.
+VITE_NEON_AUTH_URL=https://ep-floral-salad-bc2axhky.neonauth.c-16.us-east-1.aws.neon.tech/neondb/auth
+APP_URL=https://plantedandplates.vercel.app
+# DATABASE_URL=<Neon integration supplies this as a Secret>
+# OPENAI_API_KEY=<Secret; from your AI provider dashboard>
+# OPENAI_MODEL=gpt-4.1-mini
+# STRIPE_SECRET_KEY=<Secret; from Stripe>
+# STRIPE_WEBHOOK_SECRET=<Secret; from the Stripe webhook destination>

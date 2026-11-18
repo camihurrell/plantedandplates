@@ -82,6 +82,46 @@ async function createRecipe(user,profile,data) {
 }
 async function cached(key) {const db=sql();const rows=await db`SELECT value FROM pp_cache WHERE key=${key} AND expires_at>now()`;return rows[0]?.value;}
 async function cache(key,value,seconds) {const db=sql();await db`INSERT INTO pp_cache(key,value,expires_at) VALUES (${key},${JSON.stringify(value)}::jsonb,now()+(${seconds}*interval '1 second')) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,expires_at=EXCLUDED.expires_at`;}
+const OVERPASS_ENDPOINTS = [
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass-api.de/api/interpreter'
+];
+async function fetchFarmData(query) {
+  const failures = [];
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const host = new URL(endpoint).host;
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'PlantedAndPlated/1.0 (' + APP_URL + ')'
+        },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(14000)
+      });
+      if (!response.ok) {
+        failures.push(host + ': HTTP ' + response.status);
+        continue;
+      }
+      const result = await response.json();
+      if (result.remark) {
+        failures.push(host + ': query rejected');
+        continue;
+      }
+      if (!Array.isArray(result.elements)) {
+        failures.push(host + ': invalid response');
+        continue;
+      }
+      return result;
+    } catch (error) {
+      failures.push(host + ': ' + (error.name || 'request failed'));
+    }
+  }
+  console.error('All farm map providers failed', { failures });
+  throw new HttpError(502, 'The farm map is temporarily busy. Please try again shortly.', 'FARM_SEARCH_UNAVAILABLE');
+}
 async function farmSearch(user,data) {
   const location=cleanText(data.location,160),radius=Number(data.radius);
   if(!location || ![10,25,50,100].includes(radius)) throw new HttpError(400,'Enter a city and state or ZIP code, and choose a search distance.');
@@ -104,10 +144,7 @@ async function farmSearch(user,data) {
   const prior=await cached(searchKey);if(prior)return prior;
   const around=`around:${Math.ceil(radius*1609.344)},${center.lat},${center.lon}`;
   const query=`[out:json][timeout:22];(nwr(${around})["shop"="farm"];nwr(${around})["amenity"="marketplace"]["name"~"farm|grower",i];);out center tags;`;
-  const response=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'PlantedAndPlated/1.0 ('+APP_URL+')'},body:new URLSearchParams({data:query}),signal:AbortSignal.timeout(28000)});
-  if(!response.ok)throw new HttpError(502,'The farm map is busy. Please try again shortly.');
-  const result=await response.json();
-  if(result.remark)throw new HttpError(502,'The farm search could not finish. Try a smaller radius.');
+  const result=await fetchFarmData(query);
   const answer={center,radius,farms:farmRows(result.elements||[],center,radius),checkedAt:new Date().toISOString(),source:'OpenStreetMap contributors',note:'Distances are straight-line miles. Community listings may be incomplete; check current opening hours and produce with each farm.'};
   await cache(searchKey,answer,86400);return answer;
 }

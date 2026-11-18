@@ -36,7 +36,7 @@ export function getUser() { return signedUser; }
 export function openAuth(next = 'login') { open(next); }
 export async function getToken() {
   if (!auth) throw new Error('Account service is temporarily unavailable.');
-  const token = await auth.getJWTToken();
+  const token = (await auth.getSession()).data?.session?.token;
   if (!token) { open('login'); throw new Error('Please log in to use your kitchen.'); }
   return token;
 }

@@ -83,44 +83,57 @@ async function createRecipe(user,profile,data) {
 async function cached(key) {const db=sql();const rows=await db`SELECT value FROM pp_cache WHERE key=${key} AND expires_at>now()`;return rows[0]?.value;}
 async function cache(key,value,seconds) {const db=sql();await db`INSERT INTO pp_cache(key,value,expires_at) VALUES (${key},${JSON.stringify(value)}::jsonb,now()+(${seconds}*interval '1 second')) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,expires_at=EXCLUDED.expires_at`;}
 const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-  'https://overpass-api.de/api/interpreter'
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.nchc.org.tw/api/interpreter'
 ];
+
+// Query a small batch at a time: one slow public mirror must not hold up the
+// whole farm finder, and we avoid sending the same OSM query to every mirror.
 async function fetchFarmData(query) {
   const failures = [];
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    const host = new URL(endpoint).host;
+  const batchSize = 2;
+  for (let offset = 0; offset < OVERPASS_ENDPOINTS.length; offset += batchSize) {
+    const batch = OVERPASS_ENDPOINTS.slice(offset, offset + batchSize);
+    const controllers = batch.map(() => new AbortController());
+    const attempts = batch.map(async (endpoint, index) => {
+      const host = new URL(endpoint).host;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'PlantedAndPlated/1.0 (' + APP_URL + ')'
+          },
+          body: new URLSearchParams({ data: query }),
+          signal: AbortSignal.any([controllers[index].signal, AbortSignal.timeout(9000)])
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const result = await response.json();
+        if (result.remark) throw new Error('query rejected: ' + String(result.remark).slice(0, 180));
+        if (!Array.isArray(result.elements)) throw new Error('invalid response');
+        return result;
+      } catch (error) {
+        const reason = error.name === 'TimeoutError' ? 'timed out after 9s' :
+          error.name === 'AbortError' ? 'cancelled after another provider responded' :
+          String(error.message || error.name || 'request failed').slice(0, 220);
+        failures.push(host + ': ' + reason);
+        throw error;
+      }
+    });
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'PlantedAndPlated/1.0 (' + APP_URL + ')'
-        },
-        body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(14000)
-      });
-      if (!response.ok) {
-        failures.push(host + ': HTTP ' + response.status);
-        continue;
-      }
-      const result = await response.json();
-      if (result.remark) {
-        failures.push(host + ': query rejected');
-        continue;
-      }
-      if (!Array.isArray(result.elements)) {
-        failures.push(host + ': invalid response');
-        continue;
-      }
+      const result = await Promise.any(attempts);
+      controllers.forEach(controller => controller.abort());
+      await Promise.allSettled(attempts);
       return result;
-    } catch (error) {
-      failures.push(host + ': ' + (error.name || 'request failed'));
+    } catch {
+      await Promise.allSettled(attempts);
     }
   }
-  console.error('All farm map providers failed', { failures });
-  throw new HttpError(502, 'The farm map is temporarily busy. Please try again shortly.', 'FARM_SEARCH_UNAVAILABLE');
+  console.error('All farm map providers failed', { failures, providerCount: OVERPASS_ENDPOINTS.length });
+  throw new HttpError(502, 'The farm map providers are unavailable right now. Please try again shortly.', 'FARM_SEARCH_UNAVAILABLE');
 }
 async function farmSearch(user,data) {
   const location=cleanText(data.location,160),radius=Number(data.radius);

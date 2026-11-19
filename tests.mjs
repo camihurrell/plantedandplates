@@ -12,7 +12,9 @@ test('pantry input normalizes duplicates and bounds inputs',()=>{
   assert.equal(ingredientList(Array.from({length:100},(_,i)=>'item'+i)).length,50);
   assert.deepEqual(validPreferences({servings:999,minutes:123,diet:'invented',avoid:'tomato'}),{diet:'Any',avoid:'tomato',servings:8,minutes:30,includeSlow:false});
   assert.equal(validPreferences({minutes:30}).includeSlow,false);
-  assert.equal(validPreferences({minutes:180}).minutes,180);\n  assert.equal(validPreferences({minutes:180}).includeSlow,true);\n  assert.equal(validPreferences({minutes:90}).includeSlow,false);
+  assert.equal(validPreferences({minutes:180}).minutes,180);
+  assert.equal(validPreferences({minutes:180}).includeSlow,true);
+  assert.equal(validPreferences({minutes:90}).includeSlow,false);
 });
 test('farm distances use the actual search origin and exclude out-of-radius places',()=>{
   assert.equal(milesBetween({lat:40,lon:-77},{lat:40,lon:-77}),0);
@@ -70,15 +72,18 @@ test('recipe collections support flexible counts, longer meals, and desserts',()
   const recipes=[
     {...base,collection:'pantry'},
     {...base,title:'Pantry supper two',collection:'pantry'},
-    {...base,title:'Shop dish',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},\n    {...base,title:'Another shop dish',collection:'shopping',shoppingList:['1 bell pepper','1 can tomatoes','fresh basil']},
+    {...base,title:'Shop dish',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},
+    {...base,title:'Another shop dish',collection:'shopping',shoppingList:['1 bell pepper','1 can tomatoes','fresh basil']},
     {...base,title:'Sunday braise',collection:'slow',minutes:150},
     {...base,title:'Apple crumble',collection:'dessert',minutes:55}
   ];
-  assert.equal(validateRecipeCollection({recipes}).length,6);\n  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.title!=='Another shop dish')}));
+  assert.equal(validateRecipeCollection({recipes}).length,6);
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.title!=='Another shop dish')}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===3?{...r,minutes:90}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===0?{...r,shoppingList:['one','two','three']}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')}));
-  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')},{includeDesserts:false}).length,5);\n  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='slow')},{includeSlow:false}).length,5);
+  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')},{includeDesserts:false}).length,5);
+  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='slow')},{includeSlow:false}).length,5);
 });
 test('raw Stripe webhook bytes retain exact whitespace and body limits apply',async()=>{
   const bytes=Buffer.from('{ "id": "evt_test" }\n');

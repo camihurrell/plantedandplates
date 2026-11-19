@@ -7,7 +7,7 @@ export function ingredientList(value) {
   return [...new Set(values.filter(x => typeof x === 'string').map(x => cleanText(x, 70).toLowerCase()).filter(Boolean))].slice(0, 50);
 }
 export function validPreferences(body = {}) {
-  return { diet: ['Any', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free'].includes(body.diet) ? body.diet : 'Any', avoid: cleanText(body.avoid, 300), servings: Math.min(8, Math.max(1, Math.round(Number(body.servings)) || 2)), minutes: [15, 30, 45, 60, 90].includes(Number(body.minutes)) ? Number(body.minutes) : 30 };
+  return { diet: ['Any', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free'].includes(body.diet) ? body.diet : 'Any', avoid: cleanText(body.avoid, 300), servings: Math.min(8, Math.max(1, Math.round(Number(body.servings)) || 2)), minutes: [15, 30, 45, 60, 90, 120, 180, 240].includes(Number(body.minutes)) ? Number(body.minutes) : 30 };
 }
 export function milesBetween(a, b) {
   const rad = n => n * Math.PI / 180;
@@ -33,6 +33,24 @@ export const recipeSchema = { type: 'object', additionalProperties: false, requi
   ingredients: {type:'array',items:{type:'object',additionalProperties:false,required:['name','quantity','fromPantry'],properties:{name:{type:'string'},quantity:{type:'string'},fromPantry:{type:'boolean'}}}},
   steps:strings, flavorTip:{type:'string'},seasonalTip:{type:'string'},shoppingList:strings
 }};
+
+const recipeCardSchema = { ...recipeSchema, required: [...recipeSchema.required, 'collection'], properties: { ...recipeSchema.properties, collection: { type: 'string', enum: ['pantry', 'shopping', 'slow'] } } };
+export const recipeCollectionSchema = { type: 'object', additionalProperties: false, required: ['recipes'], properties: { recipes: { type: 'array', minItems: 5, maxItems: 5, items: recipeCardSchema } } };
+export function validateRecipeCollection(value) {
+  if (!value || !Array.isArray(value.recipes) || value.recipes.length !== 5) throw new Error('The recipe collection was incomplete. Please try again.');
+  const counts = { pantry: 0, shopping: 0, slow: 0 };
+  for (const recipe of value.recipes) {
+    validateRecipe(recipe);
+    if (!Object.hasOwn(counts, recipe.collection)) throw new Error('Invalid recipe collection category.');
+    counts[recipe.collection]++;
+    if (recipe.collection === 'pantry' && recipe.shoppingList.length > 2) throw new Error('Pantry-friendly recipes must use no more than two extra ingredients.');
+    if (recipe.collection === 'shopping' && (recipe.shoppingList.length < 3 || recipe.shoppingList.length > 8)) throw new Error('Shopping recipes need a useful, manageable shopping list.');
+    if (recipe.collection === 'slow' && recipe.minutes <= 90) throw new Error('The slow recipe must take longer than 90 minutes.');
+  }
+  if (counts.pantry !== 2 || counts.shopping !== 2 || counts.slow !== 1) throw new Error('The recipe collection must include two pantry recipes, two shopping recipes, and one slow recipe.');
+  return value.recipes;
+}
+
 export function validateRecipe(recipe) {
   if (!recipe || typeof recipe !== 'object' || typeof recipe.title !== 'string' || !recipe.title.trim() || recipe.title.length > 180 || !Number.isInteger(recipe.servings) || recipe.servings < 1 || recipe.servings > 8 || !Number.isInteger(recipe.minutes) || recipe.minutes < 1 || recipe.minutes > 240) throw new Error('Recipe response was incomplete. Please try again.');
   for (const field of ['description','flavorTip','seasonalTip']) if (typeof recipe[field] !== 'string' || recipe[field].length > 2500) throw new Error('Invalid recipe details.');

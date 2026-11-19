@@ -57,14 +57,20 @@ test('incomplete and malformed AI outputs are rejected instead of saved',()=>{
   assert.throws(()=>validateRecipe({...recipe,steps:['One step']}));
 });
 
-test('recipe collections enforce pantry, shopping, and long-cook categories',()=>{
+test('recipe collections support flexible counts, longer meals, and desserts',()=>{
   const base={title:'A good dinner',description:'A practical, flavorful dish.',servings:2,minutes:35,ingredients:[{name:'beans',quantity:'1 can',fromPantry:true},{name:'onion',quantity:'1',fromPantry:true}],steps:['Cook the onion.','Add beans and finish.'],flavorTip:'Brown the onion well.',seasonalTip:'Use local greens when available.',shoppingList:[]};
-  const recipes=[{...base,collection:'pantry'},{...base,title:'Pantry supper two',collection:'pantry'},{...base,title:'Shop dish one',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},{...base,title:'Shop dish two',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},{...base,title:'Sunday braise',collection:'slow',minutes:150}];
+  const recipes=[
+    {...base,collection:'pantry'},
+    {...base,title:'Pantry supper two',collection:'pantry'},
+    {...base,title:'Shop dish',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},
+    {...base,title:'Sunday braise',collection:'slow',minutes:150},
+    {...base,title:'Apple crumble',collection:'dessert',minutes:55}
+  ];
   assert.equal(validateRecipeCollection({recipes}).length,5);
-  assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===4?{...r,minutes:90}:r)}));
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===3?{...r,minutes:90}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===0?{...r,shoppingList:['one','two','three']}:r)}));
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')}));
 });
-
 test('raw Stripe webhook bytes retain exact whitespace and body limits apply',async()=>{
   const bytes=Buffer.from('{ "id": "evt_test" }\n');
   assert.deepEqual(await rawBody(Readable.from([bytes])),bytes);

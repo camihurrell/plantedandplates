@@ -4,7 +4,7 @@ import http from 'node:http';
 import { Readable } from 'node:stream';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { ingredientList, validPreferences, milesBetween, farmRows, validateRecipe, PASS_CENTS } from './domain.mjs';
-import handler, { authenticate, paymentBelongsTo, quota, rawBody } from './server.mjs';
+import handler, { authenticate, paymentBelongsTo, quota, rawBody, photonFarmElements } from './server.mjs';
 import vercelFunction from './api/app.js';
 
 test('pantry input normalizes duplicates and bounds inputs',()=>{
@@ -21,6 +21,21 @@ test('farm distances use the actual search origin and exclude out-of-radius plac
     {type:'way',id:4,center:{lat:40.01001,lon:-77},tags:{name:'Near Farm',shop:'farm'}}
   ],{lat:40,lon:-77},10);
   assert.equal(rows.length,1);assert.equal(rows[0].name,'Near Farm');assert.equal(rows[0].website,null);assert.ok(rows[0].miles<1);assert.match(rows[0].source,/openstreetmap.org\/node\/1$/);
+});
+test('Photon fallback keeps named OSM farm shops and relevant markets only',()=>{
+  const elements=photonFarmElements([
+    {type:'Feature',geometry:{type:'Point',coordinates:[-77.85,40.79]},properties:{name:'Happy Valley Farm',osm_key:'shop',osm_value:'farm',osm_type:'N',osm_id:42,street:'Farm Lane',city:'State College'}},
+    {type:'Feature',geometry:{type:'Point',coordinates:[-77.86,40.80]},properties:{name:'State College Farmers Market',osm_key:'amenity',osm_value:'marketplace',osm_type:'W',osm_id:43}},
+    {type:'Feature',geometry:{type:'Point',coordinates:[-77.87,40.81]},properties:{name:'Coffee Shop',osm_key:'amenity',osm_value:'cafe',osm_type:'N',osm_id:44}},
+    {type:'Feature',geometry:{type:'Point',coordinates:[-77.87,40.81]},properties:{name:'Unnamed Farm',osm_key:'shop',osm_value:'farm',osm_type:'N',osm_id:45}},
+    {type:'Feature',geometry:{type:'Point',coordinates:[-77.87,40.81]},properties:{name:'Broken location',osm_key:'shop',osm_value:'farm',osm_type:'N',osm_id:46}}
+  ]);
+  assert.equal(elements.length,2);
+  assert.equal(elements[0].type,'node');
+  assert.equal(elements[0].tags.shop,'farm');
+  assert.equal(elements[0].tags['addr:city'],'State College');
+  assert.equal(elements[1].type,'way');
+  assert.equal(elements[1].tags.amenity,'marketplace');
 });
 test('payment completion is bound to owner, amount, currency and actual paid status',()=>{
   const valid={mode:'payment',client_reference_id:'user-a',metadata:{user_id:'user-a'},amount_total:PASS_CENTS,currency:'usd',payment_status:'paid'};

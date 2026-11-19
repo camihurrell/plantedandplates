@@ -47,7 +47,7 @@ export function validateRecipeCollection(value) {
     if (recipe.collection === 'shopping' && (recipe.shoppingList.length < 3 || recipe.shoppingList.length > 8)) throw new Error('Shopping recipes need a useful, manageable shopping list.');
     if (recipe.collection === 'slow' && recipe.minutes <= 90) throw new Error('The slow recipe must take longer than 90 minutes.');
   }
-  if (counts.pantry < 1 || counts.pantry > 4 || counts.shopping < 1 || counts.shopping > 4 || counts.slow < 1 || counts.slow > 3 || counts.dessert < 1 || counts.dessert > 3) throw new Error('Include 1–4 pantry recipes, 1–4 shopping recipes, 1–3 longer recipes, and 1–3 desserts.');
+  if (counts.pantry < 1 || counts.pantry > 4 || counts.shopping !== 2 || counts.slow < 1 || counts.slow > 3 || counts.dessert < 1 || counts.dessert > 3) throw new Error('Include 1–4 pantry recipes, exactly 2 shopping recipes, 1–3 longer recipes, and 1–3 desserts.');
   return value.recipes;
 }
 

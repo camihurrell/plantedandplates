@@ -135,6 +135,54 @@ async function fetchFarmData(query) {
   console.error('All farm map providers failed', { failures, providerCount: OVERPASS_ENDPOINTS.length });
   throw new HttpError(502, 'The farm map providers are unavailable right now. Please try again shortly.', 'FARM_SEARCH_UNAVAILABLE');
 }
+// Convert Photon search results into the same OSM element shape used by farmRows.
+export function photonFarmElements(features) {
+  return (Array.isArray(features) ? features : []).flatMap(feature => {
+    const properties = feature?.properties || {};
+    const coordinates = feature?.geometry?.coordinates;
+    const name = cleanText(properties.name, 160);
+    const [lon, lat] = Array.isArray(coordinates) ? coordinates : [];
+    const isFarmShop = properties.osm_key === 'shop' && properties.osm_value === 'farm';
+    const isFarmMarket = properties.osm_key === 'amenity' && properties.osm_value === 'marketplace' && /farm|grower|market/i.test(name);
+    const rawType = properties.osm_type;
+    const type = rawType === 'N' ? 'node' : rawType === 'W' ? 'way' : rawType === 'R' ? 'relation' : rawType;
+    if (!name || !Number.isFinite(lat) || !Number.isFinite(lon) || !properties.osm_id || !['node','way','relation'].includes(type) || (!isFarmShop && !isFarmMarket)) return [];
+    const tags = {
+      name,
+      ...(isFarmShop ? { shop: 'farm' } : { amenity: 'marketplace' }),
+      website: properties.website,
+      opening_hours: properties.opening_hours,
+      'addr:street': properties.street,
+      'addr:city': properties.city,
+      'addr:postcode': properties.postcode
+    };
+    return [{ type, id: properties.osm_id, lat, lon, tags }];
+  });
+}
+
+// Photon is a separate OpenStreetMap-backed search service, used when public
+// Overpass mirrors reject or time out on requests from serverless deployments.
+async function fetchPhotonFarmData(center) {
+  const terms = ['farm', 'farmers market', 'farm shop'];
+  const responses = await Promise.allSettled(terms.map(async term => {
+    const params = new URLSearchParams({ q: term, lat: String(center.lat), lon: String(center.lon), limit: '25', lang: 'en' });
+    const response = await fetch('https://photon.komoot.io/api/?' + params, {
+      headers: { 'User-Agent': 'PlantedAndPlated/1.0 (' + APP_URL + ')', 'Accept': 'application/geo+json' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!response.ok) throw new Error('Photon HTTP ' + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data.features)) throw new Error('Photon returned an invalid feature collection');
+    return data.features;
+  }));
+  const successful = responses.filter(result => result.status === 'fulfilled');
+  if (!successful.length) {
+    console.error('Photon farm search fallback failed', { failures: responses.map(result => String(result.reason?.message || 'request failed').slice(0, 160)) });
+    throw new HttpError(502, 'Local farm search providers are temporarily unavailable. Please try again shortly.', 'FARM_SEARCH_UNAVAILABLE');
+  }
+  return successful.flatMap(result => result.value);
+}
+
 async function farmSearch(user,data) {
   const location=cleanText(data.location,160),radius=Number(data.radius);
   if(!location || ![10,25,50,100].includes(radius)) throw new HttpError(400,'Enter a city and state or ZIP code, and choose a search distance.');
@@ -157,8 +205,16 @@ async function farmSearch(user,data) {
   const prior=await cached(searchKey);if(prior)return prior;
   const around=`around:${Math.ceil(radius*1609.344)},${center.lat},${center.lon}`;
   const query=`[out:json][timeout:22];(nwr(${around})["shop"="farm"];nwr(${around})["amenity"="marketplace"]["name"~"farm|grower",i];);out center tags;`;
-  const result=await fetchFarmData(query);
-  const answer={center,radius,farms:farmRows(result.elements||[],center,radius),checkedAt:new Date().toISOString(),source:'OpenStreetMap contributors',note:'Distances are straight-line miles. Community listings may be incomplete; check current opening hours and produce with each farm.'};
+  let result, source='OpenStreetMap contributors';
+  try {
+    result=await fetchFarmData(query);
+  } catch (error) {
+    console.warn('Overpass farm search unavailable; trying Photon fallback', { code: error.code || 'OVERPASS_UNAVAILABLE' });
+    const features=await fetchPhotonFarmData(center);
+    result={elements:photonFarmElements(features)};
+    source='OpenStreetMap contributors (Photon fallback)';
+  }
+  const answer={center,radius,farms:farmRows(result.elements||[],center,radius),checkedAt:new Date().toISOString(),source,note:'Distances are straight-line miles. Community listings may be incomplete; check current opening hours and produce with each farm.'};
   await cache(searchKey,answer,86400);return answer;
 }
 export function paymentBelongsTo(session,userId) {return session.mode==='payment' && session.client_reference_id===userId && session.metadata?.user_id===userId && session.amount_total===PASS_CENTS && session.currency==='usd' && session.payment_status==='paid';}

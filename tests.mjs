@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { Readable } from 'node:stream';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
-import { ingredientList, validPreferences, milesBetween, farmRows, validateRecipe, validateRecipeCollection, PASS_CENTS } from './domain.mjs';
+import { ingredientList, validPreferences, milesBetween, farmRows, validateRecipe, validateRecipeCollection, validateDessertCollection, PASS_CENTS } from './domain.mjs';
 import handler, { authenticate, paymentBelongsTo, quota, rawBody, photonFarmElements } from './server.mjs';
 import vercelFunction from './api/app.js';
 
@@ -12,7 +12,7 @@ test('pantry input normalizes duplicates and bounds inputs',()=>{
   assert.equal(ingredientList(Array.from({length:100},(_,i)=>'item'+i)).length,50);
   assert.deepEqual(validPreferences({servings:999,minutes:123,diet:'invented',avoid:'tomato'}),{servings:8,minutes:30,diet:'Any',avoid:'tomato',includeSlow:true,includeDesserts:true});
   assert.deepEqual([validPreferences({includeSlow:false,includeDesserts:false}).includeSlow,validPreferences({includeSlow:false,includeDesserts:false}).includeDesserts],[false,false]);
-  assert.equal(validPreferences({minutes:180}).minutes,180);
+  assert.equal(validPreferences({minutes:180}).minutes,180);\n  assert.equal(validPreferences({minutes:180}).includeSlow,true);\n  assert.equal(validPreferences({minutes:90}).includeSlow,false);
 });
 test('farm distances use the actual search origin and exclude out-of-radius places',()=>{
   assert.equal(milesBetween({lat:40,lon:-77},{lat:40,lon:-77}),0);
@@ -58,6 +58,13 @@ test('incomplete and malformed AI outputs are rejected instead of saved',()=>{
   assert.throws(()=>validateRecipe({...recipe,steps:['One step']}));
 });
 
+test('standalone dessert collections contain only dessert recipes',()=>{
+  const base={title:'Chocolate berries',description:'A simple sweet finish.',servings:2,minutes:25,ingredients:[{name:'chocolate',quantity:'100 g',fromPantry:true},{name:'strawberries',quantity:'1 cup',fromPantry:true}],steps:['Melt the chocolate gently.','Dip the berries and chill.'],flavorTip:'Add a pinch of salt.',seasonalTip:'Use ripe fruit when available.',shoppingList:[],collection:'dessert'};
+  const recipes=[base,{...base,title:'Apple crumble',minutes:50},{...base,title:'Vanilla pudding',minutes:20}];
+  assert.equal(validateDessertCollection({recipes}).length,3);
+  assert.throws(()=>validateDessertCollection({recipes:recipes.slice(0,2)}));
+  assert.throws(()=>validateDessertCollection({recipes:[...recipes.slice(0,2),{...base,collection:'pantry'}]}));
+});
 test('recipe collections support flexible counts, longer meals, and desserts',()=>{
   const base={title:'A good dinner',description:'A practical, flavorful dish.',servings:2,minutes:35,ingredients:[{name:'beans',quantity:'1 can',fromPantry:true},{name:'onion',quantity:'1',fromPantry:true}],steps:['Cook the onion.','Add beans and finish.'],flavorTip:'Brown the onion well.',seasonalTip:'Use local greens when available.',shoppingList:[]};
   const recipes=[

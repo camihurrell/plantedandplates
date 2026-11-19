@@ -14,7 +14,7 @@ async function api(action,method='GET',data){
   return result;
 }
 function switchTab(tab){
-  if(!['cook','pantry','recipes','farms','pass'].includes(tab))tab='cook';
+  if(!['cook','pantry','recipes','desserts','farms','pass'].includes(tab))tab='cook';
   document.querySelectorAll('.tab-panel').forEach(panel=>panel.hidden=panel.id!=='panel-'+tab);
   document.querySelectorAll('[data-tab]').forEach(link=>{link.classList.toggle('active',link.dataset.tab===tab);if(link.dataset.tab===tab)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
   if(location.hash!=='#'+tab)history.replaceState(null,'',location.pathname+location.search+'#'+tab);
@@ -37,7 +37,7 @@ function paintPantry(){
   $('#pantry-chips').replaceChildren(...profile.pantry.map(item=>{const chip=document.createElement('span');chip.textContent=item;return chip;}));
 }
 async function loadAccount(user){
-  if(!user){accountId=null;profile=null;recipes=[];activeRecipe=null;$('#account-gate').hidden=false;$('#kitchen-app').hidden=false;$('#welcome').textContent='Your next good meal starts here.';$('#plan-label').textContent='Explore your kitchen';$('#generated-recipe').replaceChildren();$('#recipe-box').replaceChildren();$('#farm-list').replaceChildren();$('#farm-map').replaceChildren();$('#pantry-items').value='';$('#cook-ingredients').value=params.get('ingredients')||'';$('#farm-location').value=params.get('location')||'';$('#cook-avoid').value='';$('#cook-request').value='';$('#cook-diet').value='Any';$('#cook-servings').value='2';$('#cook-minutes').value='30';$('#cook-include-slow').checked=true;$('#cook-include-desserts').checked=true;$('#pantry-chips').replaceChildren();$('#pantry-status').textContent='';$('#farm-status').textContent='';$('#recipe-allowance').textContent='Create an account for your three free recipes.';$('#demo-notice').hidden=true;$('#checkout-button').disabled=false;$('#checkout-button').textContent='Get my Kitchen Pass →';paintRecipes();note('');return;}
+  if(!user){accountId=null;profile=null;recipes=[];activeRecipe=null;$('#account-gate').hidden=false;$('#kitchen-app').hidden=false;$('#welcome').textContent='Your next good meal starts here.';$('#plan-label').textContent='Explore your kitchen';$('#generated-recipe').replaceChildren();$('#recipe-box').replaceChildren();$('#farm-list').replaceChildren();$('#farm-map').replaceChildren();$('#pantry-items').value='';$('#cook-ingredients').value=params.get('ingredients')||'';$('#farm-location').value=params.get('location')||'';$('#cook-avoid').value='';$('#cook-request').value='';$('#cook-diet').value='Any';$('#cook-servings').value='2';$('#cook-minutes').value='30';$('#dessert-ingredients').value='';$('#dessert-servings').value='2';$('#dessert-minutes').value='30';$('#dessert-diet').value='Any';$('#dessert-avoid').value='';$('#dessert-request').value='';$('#dessert-results').replaceChildren();$('#pantry-chips').replaceChildren();$('#pantry-status').textContent='';$('#farm-status').textContent='';$('#recipe-allowance').textContent='Create an account for your three free recipes.';$('#demo-notice').hidden=true;$('#checkout-button').disabled=false;$('#checkout-button').textContent='Get my Kitchen Pass →';paintRecipes();note('');return;}
   if(accountId===user.id || loadingAccount)return;
   loadingAccount=true;accountId=user.id;$('#account-gate').hidden=true;$('#kitchen-app').hidden=false;note('Opening your kitchen…');
   try{
@@ -61,7 +61,7 @@ window.addEventListener('kitchen-auth',event=>loadAccount(event.detail));
 loadAccount(null);
 authReady.then(()=>loadAccount(getUser()));
 
-function preferences(){return {diet:$('#cook-diet').value,servings:Number($('#cook-servings').value),minutes:Number($('#cook-minutes').value),avoid:$('#cook-avoid').value,includeSlow:$('#cook-include-slow').checked,includeDesserts:$('#cook-include-desserts').checked};}
+function preferences(){return {diet:$('#cook-diet').value,servings:Number($('#cook-servings').value),minutes:Number($('#cook-minutes').value),avoid:$('#cook-avoid').value,includeSlow:Number($('#cook-minutes').value)>90};}
 $('#pantry-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=event.submitter;button.disabled=true;$('#pantry-status').textContent='Saving your cupboard…';
   try{const result=await api('pantry','PUT',{pantry:$('#pantry-items').value,preferences:preferences()});profile.pantry=result.pantry;profile.preferences=result.preferences;paintPantry();$('#pantry-status').textContent='Saved to your account.';}
@@ -77,7 +77,18 @@ $('#cook-form').addEventListener('submit',async event=>{
     $('#generated-recipe').scrollIntoView({behavior:'smooth',block:'start'});
     profile=await api('profile');paintProfile();
   }catch(error){note(error.name==='TimeoutError'?'This recipe is taking longer than expected. Check your recipe box before trying again.':error.message);}
-  finally{button.disabled=false;button.textContent='Make something delicious →';}
+  finally{button.disabled=false;button.textContent='Find my recipes →';}
+});
+$('#dessert-form').addEventListener('submit',async event=>{
+  event.preventDefault();const button=$('#dessert-generate-button');button.disabled=true;button.textContent='Baking up some ideas…';note('');
+  try{
+    const records=await api('generate-desserts','POST',{ingredients:$('#dessert-ingredients').value,servings:Number($('#dessert-servings').value),minutes:Number($('#dessert-minutes').value),diet:$('#dessert-diet').value,avoid:$('#dessert-avoid').value,request:$('#dessert-request').value});
+    recipes.unshift(...records);paintRecipes();
+    $('#dessert-results').innerHTML='<section class="recipe-group"><div class="recipe-group-heading"><span class="eyebrow">FRESH FROM THE DESSERT KITCHEN</span><h2>Your sweet ideas</h2><p>Made separately from your everyday pantry recipe suggestions.</p></div>'+records.map(record=>recipeMarkup(record)).join('')+'</section>';
+    $('#dessert-results').scrollIntoView({behavior:'smooth',block:'start'});
+    profile=await api('profile');paintProfile();
+  }catch(error){note(error.name==='TimeoutError'?'These desserts are taking longer than expected. Please try again.':error.message);}
+  finally{button.disabled=false;button.textContent='Find my desserts →';}
 });
 function recipeMarkup(record,modal=false){
   const r=record.recipe;

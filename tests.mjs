@@ -62,11 +62,11 @@ test('recipe collections support flexible counts, longer meals, and desserts',()
   const recipes=[
     {...base,collection:'pantry'},
     {...base,title:'Pantry supper two',collection:'pantry'},
-    {...base,title:'Shop dish',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},
+    {...base,title:'Shop dish',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},\n    {...base,title:'Another shop dish',collection:'shopping',shoppingList:['1 bell pepper','1 can tomatoes','fresh basil']},
     {...base,title:'Sunday braise',collection:'slow',minutes:150},
     {...base,title:'Apple crumble',collection:'dessert',minutes:55}
   ];
-  assert.equal(validateRecipeCollection({recipes}).length,5);
+  assert.equal(validateRecipeCollection({recipes}).length,6);\n  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.title!=='Another shop dish')}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===3?{...r,minutes:90}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===0?{...r,shoppingList:['one','two','three']}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')}));

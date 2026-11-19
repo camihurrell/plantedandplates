@@ -37,7 +37,7 @@ function paintPantry(){
   $('#pantry-chips').replaceChildren(...profile.pantry.map(item=>{const chip=document.createElement('span');chip.textContent=item;return chip;}));
 }
 async function loadAccount(user){
-  if(!user){accountId=null;profile=null;recipes=[];activeRecipe=null;$('#account-gate').hidden=false;$('#kitchen-app').hidden=false;$('#welcome').textContent='Your next good meal starts here.';$('#plan-label').textContent='Explore your kitchen';$('#generated-recipe').replaceChildren();$('#recipe-box').replaceChildren();$('#farm-list').replaceChildren();$('#farm-map').replaceChildren();$('#pantry-items').value='';$('#cook-ingredients').value=params.get('ingredients')||'';$('#farm-location').value=params.get('location')||'';$('#cook-avoid').value='';$('#cook-request').value='';$('#cook-diet').value='Any';$('#cook-servings').value='2';$('#cook-minutes').value='30';$('#pantry-chips').replaceChildren();$('#pantry-status').textContent='';$('#farm-status').textContent='';$('#recipe-allowance').textContent='Create an account for your three free recipes.';$('#demo-notice').hidden=true;$('#checkout-button').disabled=false;$('#checkout-button').textContent='Get my Kitchen Pass →';paintRecipes();note('');return;}
+  if(!user){accountId=null;profile=null;recipes=[];activeRecipe=null;$('#account-gate').hidden=false;$('#kitchen-app').hidden=false;$('#welcome').textContent='Your next good meal starts here.';$('#plan-label').textContent='Explore your kitchen';$('#generated-recipe').replaceChildren();$('#recipe-box').replaceChildren();$('#farm-list').replaceChildren();$('#farm-map').replaceChildren();$('#pantry-items').value='';$('#cook-ingredients').value=params.get('ingredients')||'';$('#farm-location').value=params.get('location')||'';$('#cook-avoid').value='';$('#cook-request').value='';$('#cook-diet').value='Any';$('#cook-servings').value='2';$('#cook-minutes').value='30';$('#cook-include-slow').checked=true;$('#cook-include-desserts').checked=true;$('#pantry-chips').replaceChildren();$('#pantry-status').textContent='';$('#farm-status').textContent='';$('#recipe-allowance').textContent='Create an account for your three free recipes.';$('#demo-notice').hidden=true;$('#checkout-button').disabled=false;$('#checkout-button').textContent='Get my Kitchen Pass →';paintRecipes();note('');return;}
   if(accountId===user.id || loadingAccount)return;
   loadingAccount=true;accountId=user.id;$('#account-gate').hidden=true;$('#kitchen-app').hidden=false;note('Opening your kitchen…');
   try{
@@ -61,7 +61,7 @@ window.addEventListener('kitchen-auth',event=>loadAccount(event.detail));
 loadAccount(null);
 authReady.then(()=>loadAccount(getUser()));
 
-function preferences(){return {diet:$('#cook-diet').value,servings:Number($('#cook-servings').value),minutes:Number($('#cook-minutes').value),avoid:$('#cook-avoid').value};}
+function preferences(){return {diet:$('#cook-diet').value,servings:Number($('#cook-servings').value),minutes:Number($('#cook-minutes').value),avoid:$('#cook-avoid').value,includeSlow:$('#cook-include-slow').checked,includeDesserts:$('#cook-include-desserts').checked};}
 $('#pantry-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=event.submitter;button.disabled=true;$('#pantry-status').textContent='Saving your cupboard…';
   try{const result=await api('pantry','PUT',{pantry:$('#pantry-items').value,preferences:preferences()});profile.pantry=result.pantry;profile.preferences=result.preferences;paintPantry();$('#pantry-status').textContent='Saved to your account.';}

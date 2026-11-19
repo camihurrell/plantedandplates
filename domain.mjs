@@ -35,7 +35,7 @@ export const recipeSchema = { type: 'object', additionalProperties: false, requi
 }};
 
 const recipeCardSchema = { ...recipeSchema, required: [...recipeSchema.required, 'collection'], properties: { ...recipeSchema.properties, collection: { type: 'string', enum: ['pantry', 'shopping', 'slow'] } } };
-export const recipeCollectionSchema = { type: 'object', additionalProperties: false, required: ['recipes'], properties: { recipes: { type: 'array', minItems: 5, maxItems: 5, items: recipeCardSchema } } };
+export const recipeCollectionSchema = { type: 'object', additionalProperties: false, required: ['recipes'], properties: { recipes: { type: 'array', items: recipeCardSchema } } };
 export function validateRecipeCollection(value) {
   if (!value || !Array.isArray(value.recipes) || value.recipes.length !== 5) throw new Error('The recipe collection was incomplete. Please try again.');
   const counts = { pantry: 0, shopping: 0, slow: 0 };

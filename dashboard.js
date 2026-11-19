@@ -2,7 +2,7 @@ import { authReady, getUser, getToken, openAuth } from './auth.js';
 const $=selector=>document.querySelector(selector);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const params=new URLSearchParams(location.search);
-let accountId=null,profile=null,recipes=[],activeRecipe=null,loadingAccount=false;
+let accountId=null,profile=null,recipes=[],activeRecipe=null,loadingAccount=false,farmMapInstance=null;
 function note(text){$('#app-message').textContent=text;$('#app-message').hidden=!text;}
 async function api(action,method='GET',data){
   const owner=getUser()?.id;
@@ -116,8 +116,23 @@ $('#local-form').addEventListener('submit',async event=>{
     const result=await api('farms','POST',{location:$('#farm-location').value,radius:Number($('#farm-radius').value)});
     $('#farm-status').textContent=`${result.farms.length} mapped ${result.farms.length===1?'place':'places'} within ${result.radius} miles of ${result.center.name}.`;
     const {lat,lon}=result.center;
-    const latDelta=result.radius/69,lonDelta=Math.min(180,result.radius/(69*Math.max(.1,Math.cos(lat*Math.PI/180))));
-    const map=document.createElement('iframe');map.title='Map centered on your searched location';map.loading='lazy';map.referrerPolicy='no-referrer';map.src='https://www.openstreetmap.org/export/embed.html?'+new URLSearchParams({bbox:[Math.max(-180,lon-lonDelta),Math.max(-85,lat-latDelta),Math.min(180,lon+lonDelta),Math.min(85,lat+latDelta)].join(','),layer:'mapnik',marker:lat+','+lon});$('#farm-map').append(map);
+    if(farmMapInstance){farmMapInstance.remove();farmMapInstance=null;}
+    $('#farm-map').replaceChildren();
+    if(!window.L)throw new Error('The map library could not load. Please refresh and try again.');
+    const mapNode=document.createElement('div');mapNode.id='farm-leaflet-map';mapNode.setAttribute('role','region');mapNode.setAttribute('aria-label','Map showing each nearby farm and farmers market');$('#farm-map').append(mapNode);
+    farmMapInstance=L.map(mapNode,{scrollWheelZoom:false}).setView([lat,lon],12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'}).addTo(farmMapInstance);
+    L.circleMarker([lat,lon],{radius:7,color:'#526044',weight:2,fillColor:'#d8dfc4',fillOpacity:1}).addTo(farmMapInstance).bindPopup('<strong>'+esc(result.center.name)+'</strong><br>Search location');
+    const farmMarkers=[];
+    result.farms.forEach((farm,index)=>{
+      if(!Number.isFinite(Number(farm.lat))||!Number.isFinite(Number(farm.lon)))return;
+      const marker=L.marker([Number(farm.lat),Number(farm.lon)]).addTo(farmMapInstance);
+      const popup='<strong>'+esc(farm.name)+'</strong><br>'+esc(farm.type)+' · '+esc(farm.miles)+' mi'+(farm.address?'<br>'+esc(farm.address):'')+'<br><a href="'+esc(farm.directions)+'" target="_blank" rel="noopener noreferrer">Directions</a>';
+      marker.bindPopup(popup);farmMarkers.push(marker);
+    });
+    if(farmMarkers.length){const bounds=L.featureGroup(farmMarkers).getBounds().extend([lat,lon]);farmMapInstance.fitBounds(bounds.pad(.18),{maxZoom:13});}
+    else{farmMapInstance.setView([lat,lon],11);}
+    requestAnimationFrame(()=>farmMapInstance?.invalidateSize());
     $('#farm-list').innerHTML=result.farms.length?result.farms.map(farm=>`<article class="farm-card"><div class="farm-card-heading"><span class="eyebrow">${esc(farm.type)}</span><span class="distance">${farm.miles} mi</span></div><h3>${esc(farm.name)}</h3><p>${farm.address?esc(farm.address):'See the map for this location.'}</p>${farm.produce?`<p><strong>Listed produce:</strong> ${esc(farm.produce)}</p>`:''}${farm.hours?`<p class="small-note"><strong>Listed hours:</strong> ${esc(farm.hours)}</p>`:'<p class="small-note">Contact the farm for current hours and produce.</p>'}<div class="farm-links"><a class="text-link" href="${esc(farm.directions)}" target="_blank" rel="noopener noreferrer">Directions ↗</a>${farm.website?`<a class="text-link" href="${esc(farm.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>`:''}<a href="${esc(farm.source)}" target="_blank" rel="noopener noreferrer">Source listing</a></div></article>`).join(''):'<div class="empty-state"><h3>No matching places are mapped in this radius.</h3><p>Try a wider distance or a nearby town. This directory doesn’t include every farm.</p></div>';
   }catch(error){$('#farm-status').textContent=error.message;}finally{button.disabled=false;button.textContent='Find local →';}
 });

@@ -87,7 +87,7 @@ function paintActive(){
   if(!Array.isArray(activeRecipe)||!activeRecipe.length)return;
   const groups=[
     {key:'pantry',title:'Cook with what you have',description:'One to four ideas built around your ingredients, with no more than two extras to pick up.'},
-    {key:'shopping',title:'Worth a little shopping',description:'One to four dishes with a few more ingredients to bring home.'},
+    {key:'shopping',title:'Worth a little shopping',description:'Two dishes that introduce new ingredients and a few worthwhile things to bring home.'},
     {key:'slow',title:'Take your time',description:'Longer weekend-style recipes that take more than 1½ hours.'},
     {key:'dessert',title:'Something sweet',description:'Desserts and treats to finish things on a lovely note.'}
   ];

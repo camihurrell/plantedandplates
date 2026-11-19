@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { Readable } from 'node:stream';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
-import { ingredientList, validPreferences, milesBetween, farmRows, validateRecipe, PASS_CENTS } from './domain.mjs';
+import { ingredientList, validPreferences, milesBetween, farmRows, validateRecipe, validateRecipeCollection, PASS_CENTS } from './domain.mjs';
 import handler, { authenticate, paymentBelongsTo, quota, rawBody, photonFarmElements } from './server.mjs';
 import vercelFunction from './api/app.js';
 
@@ -11,6 +11,7 @@ test('pantry input normalizes duplicates and bounds inputs',()=>{
   assert.deepEqual(ingredientList(' Eggs, eggs, potatoes, , cheddar '),['eggs','potatoes','cheddar']);
   assert.equal(ingredientList(Array.from({length:100},(_,i)=>'item'+i)).length,50);
   assert.deepEqual(validPreferences({servings:999,minutes:123,diet:'invented',avoid:'tomato'}),{servings:8,minutes:30,diet:'Any',avoid:'tomato'});
+  assert.equal(validPreferences({minutes:180}).minutes,180);
 });
 test('farm distances use the actual search origin and exclude out-of-radius places',()=>{
   assert.equal(milesBetween({lat:40,lon:-77},{lat:40,lon:-77}),0);
@@ -55,6 +56,15 @@ test('incomplete and malformed AI outputs are rejected instead of saved',()=>{
   assert.throws(()=>validateRecipe({...recipe,servings:100}));
   assert.throws(()=>validateRecipe({...recipe,steps:['One step']}));
 });
+
+test('recipe collections enforce pantry, shopping, and long-cook categories',()=>{
+  const base={title:'A good dinner',description:'A practical, flavorful dish.',servings:2,minutes:35,ingredients:[{name:'beans',quantity:'1 can',fromPantry:true},{name:'onion',quantity:'1',fromPantry:true}],steps:['Cook the onion.','Add beans and finish.'],flavorTip:'Brown the onion well.',seasonalTip:'Use local greens when available.',shoppingList:[]};
+  const recipes=[{...base,collection:'pantry'},{...base,title:'Pantry supper two',collection:'pantry'},{...base,title:'Shop dish one',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},{...base,title:'Shop dish two',collection:'shopping',shoppingList:['1 lemon','fresh parsley','olive oil']},{...base,title:'Sunday braise',collection:'slow',minutes:150}];
+  assert.equal(validateRecipeCollection({recipes}).length,5);
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===4?{...r,minutes:90}:r)}));
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===0?{...r,shoppingList:['one','two','three']}:r)}));
+});
+
 test('raw Stripe webhook bytes retain exact whitespace and body limits apply',async()=>{
   const bytes=Buffer.from('{ "id": "evt_test" }\n');
   assert.deepEqual(await rawBody(Readable.from([bytes])),bytes);

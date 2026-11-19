@@ -7,7 +7,8 @@ export function ingredientList(value) {
   return [...new Set(values.filter(x => typeof x === 'string').map(x => cleanText(x, 70).toLowerCase()).filter(Boolean))].slice(0, 50);
 }
 export function validPreferences(body = {}) {
-  return { diet: ['Any', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free'].includes(body.diet) ? body.diet : 'Any', avoid: cleanText(body.avoid, 300), servings: Math.min(8, Math.max(1, Math.round(Number(body.servings)) || 2)), minutes: [15, 30, 45, 60, 90, 120, 180, 240].includes(Number(body.minutes)) ? Number(body.minutes) : 30, includeSlow: Number(body.minutes) > 90 };
+  const minutes = [15, 30, 45, 60, 90, 120, 180, 240].includes(Number(body.minutes)) ? Number(body.minutes) : 30;
+  return { diet: ['Any', 'Vegetarian', 'Vegan', 'Pescatarian', 'Gluten-free', 'Dairy-free'].includes(body.diet) ? body.diet : 'Any', avoid: cleanText(body.avoid, 300), servings: Math.min(8, Math.max(1, Math.round(Number(body.servings)) || 2)), minutes, includeSlow: minutes > 90 };
 }
 export function milesBetween(a, b) {
   const rad = n => n * Math.PI / 180;

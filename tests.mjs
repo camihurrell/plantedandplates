@@ -10,7 +10,8 @@ import vercelFunction from './api/app.js';
 test('pantry input normalizes duplicates and bounds inputs',()=>{
   assert.deepEqual(ingredientList(' Eggs, eggs, potatoes, , cheddar '),['eggs','potatoes','cheddar']);
   assert.equal(ingredientList(Array.from({length:100},(_,i)=>'item'+i)).length,50);
-  assert.deepEqual(validPreferences({servings:999,minutes:123,diet:'invented',avoid:'tomato'}),{servings:8,minutes:30,diet:'Any',avoid:'tomato',includeSlow:true,includeDesserts:true});\n  assert.deepEqual([validPreferences({includeSlow:false,includeDesserts:false}).includeSlow,validPreferences({includeSlow:false,includeDesserts:false}).includeDesserts],[false,false]);
+  assert.deepEqual(validPreferences({servings:999,minutes:123,diet:'invented',avoid:'tomato'}),{servings:8,minutes:30,diet:'Any',avoid:'tomato',includeSlow:true,includeDesserts:true});
+  assert.deepEqual([validPreferences({includeSlow:false,includeDesserts:false}).includeSlow,validPreferences({includeSlow:false,includeDesserts:false}).includeDesserts],[false,false]);
   assert.equal(validPreferences({minutes:180}).minutes,180);
 });
 test('farm distances use the actual search origin and exclude out-of-radius places',()=>{
@@ -69,7 +70,8 @@ test('recipe collections support flexible counts, longer meals, and desserts',()
   assert.equal(validateRecipeCollection({recipes}).length,6);\n  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.title!=='Another shop dish')}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===3?{...r,minutes:90}:r)}));
   assert.throws(()=>validateRecipeCollection({recipes:recipes.map((r,i)=>i===0?{...r,shoppingList:['one','two','three']}:r)}));
-  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')}));\n  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')},{includeDesserts:false}).length,5);\n  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='slow')},{includeSlow:false}).length,5);
+  assert.throws(()=>validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')}));
+  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='dessert')},{includeDesserts:false}).length,5);\n  assert.equal(validateRecipeCollection({recipes:recipes.filter(r=>r.collection!=='slow')},{includeSlow:false}).length,5);
 });
 test('raw Stripe webhook bytes retain exact whitespace and body limits apply',async()=>{
   const bytes=Buffer.from('{ "id": "evt_test" }\n');

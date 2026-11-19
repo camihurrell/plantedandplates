@@ -34,11 +34,11 @@ export const recipeSchema = { type: 'object', additionalProperties: false, requi
   steps:strings, flavorTip:{type:'string'},seasonalTip:{type:'string'},shoppingList:strings
 }};
 
-const recipeCardSchema = { ...recipeSchema, required: [...recipeSchema.required, 'collection'], properties: { ...recipeSchema.properties, collection: { type: 'string', enum: ['pantry', 'shopping', 'slow'] } } };
+const recipeCardSchema = { ...recipeSchema, required: [...recipeSchema.required, 'collection'], properties: { ...recipeSchema.properties, collection: { type: 'string', enum: ['pantry', 'shopping', 'slow', 'dessert'] } } };
 export const recipeCollectionSchema = { type: 'object', additionalProperties: false, required: ['recipes'], properties: { recipes: { type: 'array', items: recipeCardSchema } } };
 export function validateRecipeCollection(value) {
-  if (!value || !Array.isArray(value.recipes) || value.recipes.length !== 5) throw new Error('The recipe collection was incomplete. Please try again.');
-  const counts = { pantry: 0, shopping: 0, slow: 0 };
+  if (!value || !Array.isArray(value.recipes) || value.recipes.length < 4 || value.recipes.length > 14) throw new Error('The recipe collection was incomplete. Please try again.');
+  const counts = { pantry: 0, shopping: 0, slow: 0, dessert: 0 };
   for (const recipe of value.recipes) {
     validateRecipe(recipe);
     if (!Object.hasOwn(counts, recipe.collection)) throw new Error('Invalid recipe collection category.');
@@ -47,7 +47,7 @@ export function validateRecipeCollection(value) {
     if (recipe.collection === 'shopping' && (recipe.shoppingList.length < 3 || recipe.shoppingList.length > 8)) throw new Error('Shopping recipes need a useful, manageable shopping list.');
     if (recipe.collection === 'slow' && recipe.minutes <= 90) throw new Error('The slow recipe must take longer than 90 minutes.');
   }
-  if (counts.pantry !== 2 || counts.shopping !== 2 || counts.slow !== 1) throw new Error('The recipe collection must include two pantry recipes, two shopping recipes, and one slow recipe.');
+  if (counts.pantry < 1 || counts.pantry > 4 || counts.shopping < 1 || counts.shopping > 4 || counts.slow < 1 || counts.slow > 3 || counts.dessert < 1 || counts.dessert > 3) throw new Error('Include 1–4 pantry recipes, 1–4 shopping recipes, 1–3 longer recipes, and 1–3 desserts.');
   return value.recipes;
 }
 

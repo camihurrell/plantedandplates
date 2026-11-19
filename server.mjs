@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import Stripe from 'stripe';
 import { sql, ensureSchema, ensureProfile } from './db.mjs';
-import { PASS_CENTS, FREE_RECIPES, DAILY_PAID_RECIPES, cleanText, ingredientList, validPreferences, recipeSchema, recipeCollectionSchema, validateRecipeCollection, farmRows } from './domain.mjs';
+import { PASS_CENTS, FREE_RECIPES, DAILY_PAID_RECIPES, cleanText, ingredientList, validPreferences, recipeSchema, recipeCollectionSchema, dessertCollectionSchema, validateRecipeCollection, validateDessertCollection, farmRows } from './domain.mjs';
 
 const APP_URL = process.env.APP_URL || 'https://plantedandplates.vercel.app';
 let keySet, stripeClient;
@@ -53,10 +53,10 @@ async function profileData(profile) {
   const usage=await db`SELECT calls FROM pp_usage WHERE user_id=${profile.user_id} AND bucket=${q.bucket}`;
   return {name:profile.name,email:profile.email,paid:profile.paid || profile.is_demo,demo:profile.is_demo,pantry:profile.pantry,preferences:profile.preferences,remaining:Math.max(0,q.limit-(usage[0]?.calls||0)),limit:q.limit};
 }
-async function createRecipe(user,profile,data) {
+async function createRecipe(user,profile,data,dessertsOnly=false) {
   if(!process.env.OPENAI_API_KEY) throw new HttpError(503,'The recipe kitchen is temporarily unavailable. Please try again later.','AI_NOT_CONFIGURED');
   const pantry=ingredientList(data.ingredients);
-  if(!pantry.length) throw new HttpError(400,'Add at least one ingredient to start cooking.');
+  if(!pantry.length && !dessertsOnly) throw new HttpError(400,'Add at least one ingredient to start cooking.');
   const preferences=validPreferences(data),q=quota(profile),db=sql();
   try {await reserve(user.id,q.bucket,q.limit);}catch(e){if(e.code==='USAGE_LIMIT' && !profile.paid && !profile.is_demo)throw new HttpError(402,'You’ve used your three free recipes. A Kitchen Pass opens up more cooking.','UPGRADE_REQUIRED');throw e;}
   let stored=false;
@@ -64,16 +64,16 @@ async function createRecipe(user,profile,data) {
     const response=await fetch('https://api.openai.com/v1/responses',{
       method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.OPENAI_API_KEY},signal:AbortSignal.timeout(40000),
       body:JSON.stringify({model:process.env.OPENAI_MODEL || 'gpt-4.1-mini',store:false,max_output_tokens:14000,
-        instructions:`You are the experienced home cook behind Planted & Plated. Create a varied collection of 3 to 12 distinct, practical recipes. Include 1 to 4 pantry recipes (collection=pantry): build around supplied ingredients and require no more than two additional shopping-list ingredients each. Include exactly 2 shopping recipes (collection=shopping): appealing dishes using the pantry plus three to eight worthwhile ingredients to buy. ${preferences.includeSlow?'Include 1 to 3 longer recipes (collection=slow), more involved meals taking 91 to 240 minutes total, suitable for a relaxed weekend.':'Do not include any slow recipes.'} ${preferences.includeDesserts?'Include 1 to 3 desserts (collection=dessert): genuinely varied sweet finishes, baking projects or simple treats; clearly mark all missing ingredients.':'Do not include any desserts.'} Keep every recipe distinct and useful, not minor variations. Respect all dietary preferences and exclusions, scale exact quantities for requested servings, and never assume unlisted ingredients are in the pantry. The preferred time in the input applies to pantry and shopping recipes; longer recipes intentionally exceed 90 minutes. Desserts may be quick or involved and should show their actual total time. Mark every ingredient not supplied in the pantry as fromPantry=false, including oil, salt and spices unless listed. shoppingList must contain missing items with quantities. Give exact, realistic prep and cooking steps, temperatures and doneness cues. Flavor should come from good technique, balance and texture. Include a useful flavor tip. Seasonal advice must be conditional on local season, not invented availability. Never invent farms or claim any farm stocks an item. Keep recipes realistic and food-safe. No medical, nutritional, allergy-free or tested-recipe guarantees. Return only the specified JSON object.`,
+        instructions:dessertsOnly?'You are the dessert chef for Planted & Plated. Create exactly 3 or 4 distinct dessert recipes, all with collection=dessert. This is a standalone dessert request, not a meal plan. Use optional ingredients supplied by the user when provided, but do not require them; otherwise suggest a varied mix of simple treats, fruit desserts, baked desserts and special-occasion sweets. Respect dietary preferences and excluded ingredients. Scale quantities for requested servings. Show realistic total preparation and cooking time, exact quantities, clear steps, temperatures and doneness cues. Clearly mark which ingredients are supplied and list all missing ingredients with quantities. Include a useful flavor tip. Return only the specified JSON object.':`You are the experienced home cook behind Planted & Plated. Create a varied collection of 3 to 9 distinct, practical savory recipes. Include 1 to 4 pantry recipes (collection=pantry): build around supplied ingredients and require no more than two additional shopping-list ingredients each. Include exactly 2 shopping recipes (collection=shopping): appealing dishes using the pantry plus three to eight worthwhile ingredients to buy. ${preferences.includeSlow?'Include 1 to 3 longer recipes (collection=slow), more involved meals taking 91 to 240 minutes total, suitable for a relaxed weekend.':'Do not include slow recipes.'} Keep every recipe distinct and useful, not minor variations. Respect all dietary preferences and exclusions, scale exact quantities for requested servings, and never assume unlisted ingredients are in the pantry. The preferred time applies to everyday pantry and shopping recipes; when it is over 90 minutes, also include longer weekend recipes. Mark every ingredient not supplied in the pantry as fromPantry=false, including oil, salt and spices unless listed. shoppingList must contain missing items with quantities. Give exact, realistic prep and cooking steps, temperatures and doneness cues. Flavor should come from good technique, balance and texture. Include a useful flavor tip. Seasonal advice must be conditional on local season, not invented availability. Never invent farms or claim any farm stocks an item. Keep recipes realistic and food-safe. No medical, nutritional, allergy-free or tested-recipe guarantees. Return only the specified JSON object.`,
         input:JSON.stringify({pantry,...preferences,request:cleanText(data.request,500),location:cleanText(data.location,160),month:new Date().toLocaleString('en-US',{month:'long'})}),
-        text:{format:{type:'json_schema',name:'farm_to_table_recipe_collection',strict:true,schema:recipeCollectionSchema}}
+        text:{format:{type:'json_schema',name:dessertsOnly?'planted_and_plated_desserts':'farm_to_table_recipe_collection',strict:true,schema:dessertsOnly?dessertCollectionSchema:recipeCollectionSchema}}
       })
     });
     if(!response.ok) throw new HttpError(502,'The recipe service couldn’t finish that meal. Please try again.','AI_PROVIDER_ERROR');
     const result=await response.json();
     if(result.status==='incomplete') throw new Error('Incomplete model output');
     const text=result.output?.flatMap(item=>item.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');
-    const collection=validateRecipeCollection(JSON.parse(text),preferences);
+    const collection=dessertsOnly?validateDessertCollection(JSON.parse(text)):validateRecipeCollection(JSON.parse(text),{includeSlow:preferences.includeSlow,includeDesserts:false});
     const createdAt=new Date().toISOString();
     const records=collection.map(recipe=>({id:randomUUID(),recipe,saved:false,created_at:createdAt}));
     await db.transaction(records.map(record=>db`INSERT INTO pp_recipes(id,user_id,recipe) VALUES (${record.id},${user.id},${JSON.stringify(record.recipe)}::jsonb)`));
@@ -259,7 +259,7 @@ export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json; charset=utf-8');
   try {
     const url=new URL(req.url,APP_URL),action=url.searchParams.get('action')||'profile';
-    const methods={health:['GET'],webhook:['POST'],profile:['GET'],pantry:['PUT'],generate:['POST'],recipes:['GET','PATCH','DELETE'],farms:['POST'],checkout:['POST'],confirm:['POST']};
+    const methods={health:['GET'],webhook:['POST'],profile:['GET'],pantry:['PUT'],generate:['POST'],'generate-desserts':['POST'],recipes:['GET','PATCH','DELETE'],farms:['POST'],checkout:['POST'],confirm:['POST']};
     if(!methods[action])throw new HttpError(404,'That kitchen feature could not be found.');
     if(!methods[action].includes(req.method)){res.setHeader('Allow',methods[action].join(', '));throw new HttpError(405,'That action is not supported.');}
     if(action==='health'){res.statusCode=200;res.end(JSON.stringify({ai:!!process.env.OPENAI_API_KEY,payments:!!process.env.STRIPE_SECRET_KEY,webhook:!!process.env.STRIPE_WEBHOOK_SECRET,database:!!(process.env.DATABASE_URL||process.env.POSTGRES_URL)}));return;}
@@ -274,6 +274,7 @@ export default async function handler(req,res) {
       output={pantry,preferences};
     }
     if(action==='generate')output=await createRecipe(user,profile,await body(req));
+    if(action==='generate-desserts')output=await createRecipe(user,profile,await body(req),true);
     if(action==='recipes'){
       if(req.method==='GET')output=await db`SELECT id,recipe,saved,created_at FROM pp_recipes WHERE user_id=${user.id} ORDER BY created_at DESC LIMIT 150`;
       else{
